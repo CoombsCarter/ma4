@@ -15,15 +15,18 @@
 
 
 // constants
-
+const int kMaxLineLength = 40;
 
 
 // prototypes
-int processGames(char);
+int processGames(char[]);
 int parseLine(char[], char[], int*, int*);
+void parsePrimaryTeam(char[]);
+void clearCR(char[]);
 
 
-int man(void) {
+
+int main(void) {
 	/*	
 	*	open teams.txt
 	*	exit program if error
@@ -32,6 +35,22 @@ int man(void) {
 	*	"Processing Detroit Red Wings.txt:\n"
 	*	call processGames() with that line as the parameter
 	*/
+
+	FILE* fpText = NULL;
+	fpText = fopen("teams.txt", "r");								// opening text file to read from
+	if (fpText == NULL) {
+		printf("Can't open file for reading\n");
+		return -1;													// exit program if error
+	}
+
+	char filename[kMaxLineLength + 1] = "";							// +1 for the NULL
+	while (!feof(fpText)) {
+		if ( (fgets(filename, sizeof filename, fpText)) != 0) {		// reading each line into filename array
+			clearCR(filename);										// clearing \n
+			processGames(filename);
+		}
+	}
+
 	return 0;
 }
 
@@ -46,7 +65,7 @@ int man(void) {
 			    0  : processGames() worked perfectly.
 				-1 : 
 */
-int processGames(char filename) {
+int processGames(char filename[]) {
 	/*
 	*	open filename
 	*	loop
@@ -56,6 +75,47 @@ int processGames(char filename) {
 	*	calculate winning percentage
 	*	output winning percentage and record
 	*/
+	FILE* gameResult = NULL;
+	gameResult = fopen(filename, "r");								// opening text file to read from
+	if (gameResult == NULL) {
+		printf("Can't open file for reading\n");
+		return -1;													// skip this line if error 
+	}
+
+	char wholeLine[kMaxLineLength + 1] = "";						// +1 for NULL 
+	char primaryTeam[kMaxLineLength + 1] = "";
+	char oppName[kMaxLineLength + 1] = "";
+	int teamScore = -1;
+	int oppScore = -1;
+	int win = 0;
+	int tie = 0;
+	int loss = 0;
+	double winningPercentage = 0.0;
+
+	parsePrimaryTeam(filename);
+
+	while (!feof(gameResult)) {
+		if ((fgets(wholeLine, sizeof wholeLine, gameResult)) != 0) {
+			clearCR(wholeLine);										// clearing \n
+			parseLine(wholeLine, oppName, &teamScore, &oppScore);
+
+			if (teamScore > oppScore) {								// primary team wins
+				printf("%s beat %s %d-%d", primaryTeam, oppName, teamScore, oppScore);
+				win += 1;
+			}
+			else if (teamScore < oppScore) {						// opp team wins
+				printf("%s lost to  %s %d-%d", primaryTeam, oppName, oppScore, teamScore);
+				loss += 1;
+			}
+			else {													// tie game
+				printf("%s and %s tied at %d", primaryTeam, oppName, teamScore);
+				tie += 1;
+			}
+
+			winningPercentage = ( (2 * win + tie) / (2 * (win + tie + loss)) );
+			printf("Season result for %s: %lf (%d-%d-%d)", primaryTeam, winningPercentage, win, loss, tie);
+		}
+	}
 	return 0; // happy path
 }
 
@@ -72,7 +132,7 @@ int processGames(char filename) {
 *			    0  : parseLine() worked perfectly.
 *				-1 : 
 */
-int parseLine(char gameResult[], char oppName[], int *teamScore, int *oppScore) {
+int parseLine(char wholeLine[], char oppName[], int *teamScore, int *oppScore) {
 	/* 
 	*	strchr()
 	*	strcpy() copy team name into oppName using comma position from strchr()
@@ -80,5 +140,36 @@ int parseLine(char gameResult[], char oppName[], int *teamScore, int *oppScore) 
 	*	find primary score between comma and dash, opponent score after dash and before NULL
 	*	use atoi() to put those scores into the integer arguments
 	*/
+	
 	return 0; // happy path
+}
+
+
+
+/*
+* Function: clearCR()
+* Description: This function removes the file extension of a string
+* Parameters: char filename[]  : a string to remove the file extension
+* Returns: void
+*/
+void parsePrimaryTeam(char filename[]) {
+
+}
+
+
+
+/*
+* Function: clearCR()
+* Description: This function is a safer way to clear a new line character
+*			   that may or may not be there.
+* Parameters: char buf[]  : a string to remove the new line character
+* Returns: void
+*/
+void clearCR(char buf[])
+{
+	char* whereCR = strchr(buf, '\n');
+	if (whereCR != NULL)
+	{
+		*whereCR = '\0';
+	}
 }
