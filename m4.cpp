@@ -17,6 +17,9 @@
 
 // constants
 const int kMaxLineLength = 40;
+const int kFileError = -1;
+const int kNoDash = -2;
+const int kNoComma = -3;
 
 
 // prototypes
@@ -33,16 +36,23 @@ int main(void) {
 	fpText = fopen("teams.txt", "r");								// opening text file to read from
 	if (fpText == NULL) {
 		printf("Can't open file for reading\n");
-		return -1;													// exit program if error
+		return kFileError;											// exit program if error
 	}
 
 	char filename[kMaxLineLength + 1] = "";							// +1 for the NULL
 	while (!feof(fpText)) {
-		if ( (fgets(filename, sizeof filename, fpText)) != 0) {		// reading each line into filename array
-			clearCR(filename);										// clearing \n
-			printf("Processing %s:\n", filename);
-			processGames(filename);
+		if (fgets(filename, sizeof filename, fpText) != 0) {		// reading each line into filename array
+			if (filename[0] != '\n') {								// checking for blank line
+				clearCR(filename);									// clearing \n
+				printf("Processing %s:\n", filename);
+				processGames(filename);
+			}
 		}
+	}
+
+	if (fclose(fpText) != 0) {										// closing the file
+		printf("Error closing file.\n");
+		return kFileError;											// exit program if error
 	}
 
 	return 0;
@@ -57,7 +67,7 @@ int main(void) {
 * Parameters: char filename : the name of the file that holds the relevant data.
 * Returns: int: an integer that represents whether the function worked perfectly or not.
 			    0  : processGames() worked perfectly.
-				-1 : 
+				-1 : Error with opening or closing the file.
 */
 int processGames(char filename[]) {
 
@@ -65,7 +75,7 @@ int processGames(char filename[]) {
 	gameResult = fopen(filename, "r");								// opening text file to read from
 	if (gameResult == NULL) {
 		printf("Can't open file for reading\n");
-		return -1;													// skip this line if error 
+		return kFileError;											// skip this line if error 
 	}
 
 	char wholeLine[kMaxLineLength + 1] = "";						// +1 for NULL 
@@ -81,27 +91,35 @@ int processGames(char filename[]) {
 	parsePrimaryTeam(filename, primaryTeam);						// parsing the file extension off the filename
 
 	while (!feof(gameResult)) {
-		if ((fgets(wholeLine, sizeof wholeLine, gameResult)) != 0) {
-			clearCR(wholeLine);										// clearing \n
-			parseLine(wholeLine, oppName, &teamScore, &oppScore);
+		if (fgets(wholeLine, sizeof wholeLine, gameResult) != 0) {
+			if (wholeLine[0] != '\n') {
+				clearCR(wholeLine);									// clearing \n
+				if (parseLine(wholeLine, oppName, &teamScore, &oppScore) == 0) {
 
-			if (teamScore > oppScore) {								// primary team wins
-				printf("\t%s beat %s %d-%d\n", primaryTeam, oppName, teamScore, oppScore);
-				win += 1;
-			}
-			else if (teamScore < oppScore) {						// opp team wins
-				printf("\t%s lost to %s %d-%d\n", primaryTeam, oppName, oppScore, teamScore);
-				loss += 1;
-			}
-			else {													// tie game
-				printf("\t%s and %s tied at %d\n", primaryTeam, oppName, teamScore);
-				tie += 1;
+					if (teamScore > oppScore) {						// primary team wins
+						printf("\t%s beat %s %d-%d\n", primaryTeam, oppName, teamScore, oppScore);
+						win += 1;
+					}
+					else if (teamScore < oppScore) {				// opp team wins
+						printf("\t%s lost to %s %d-%d\n", primaryTeam, oppName, oppScore, teamScore);
+						loss += 1;
+					}
+					else {											// tie game
+						printf("\t%s and %s tied at %d\n", primaryTeam, oppName, teamScore);
+						tie += 1;
+					}
+				}
 			}
 		}
 	}
 
 	winningPercentage = (2.0 * win + tie) / (2.0 * (win + tie + loss));
 	printf("Season result for %s: %.3lf (%d-%d-%d)\n\n", primaryTeam, winningPercentage, win, loss, tie);
+
+	if (fclose(gameResult) != 0) {									// closing the file
+		printf("Error closing file.\n");
+		return kFileError;											// skip this line
+	}
 
 	return 0;														// happy path
 }
@@ -117,34 +135,50 @@ int processGames(char filename[]) {
 *			  int *oppScore     : a pointer to the opposing teams score.
 * Returns: int: an integer that represents whether the function worked perfectly or not.
 *			    0  : parseLine() worked perfectly.
-*				-1 : 
+*				kNoDash : There was no dash delimiter, skip line.
+*				kNoComma : There was no comma delimiter, skip line.
 */
 int parseLine(char wholeLine[], char oppName[], int *teamScore, int *oppScore) {
 
-	for (int i = 0; oppName[i]; i++) {
+	for (int i = 0; oppName[i]; i++) {								// clearing the last opponents name from the char array
 		if (oppName[i] != '\0') {
 			oppName[i] = '\0';
 		}
 	}
 
-	int commaIndex = NULL;
-	for (int i = 0; wholeLine[i] != ','; i++) {
+	int commaIndex = -1;
+	for (int i = 0; (wholeLine[i] != ',') && (i <= (kMaxLineLength + 2)); i++) {	// stop at a comma or stop at the end of the array
+																					// +2 to allow the for loop to last the entire array
 		oppName[i] = wholeLine[i];
 		commaIndex = i;
 	}
+	if ( (commaIndex == -1) || (commaIndex > kMaxLineLength) ) {	// checking for comma delimiter
+		printf("\tNo comma delimiter, skipping this line.\n");
+		return kNoComma;											// skip line if no comma
+	}
+
 	char score[7] = "";												// 6 bytes to allow for four digits, one space, one dash, and a NULL
 	int scoreIndex = 0;
-	for (int i = 0; wholeLine[commaIndex + 2] != '\0'; commaIndex++) { // +2 to skip the last character in the name and the comma
+	for (int i = 0; wholeLine[commaIndex + 2] != '\0'; commaIndex++) {	// +2 to skip the last character in the name and the comma
 		score[scoreIndex] = wholeLine[commaIndex + 2];
 		scoreIndex += 1;
 	}
 
-	char delimiters[3] = { ' ', '-', '\0' };
+	int dashIndex = -1;												// checking for dash delimiter
+	for (int i = 0; (wholeLine[i] != '-') && (i <= (kMaxLineLength + 2)); i++) {	// +2 to allow the for loop to last the entire array
+		dashIndex = i;
+	}
+	dashIndex++;													// so dashIndex represents the correct position of the dash
+	if ( (dashIndex == -1) || (dashIndex > kMaxLineLength) ) {
+		printf("\tNo dash delimiter, skipping this line.\n");
+		return kNoDash;												// skip line if no dash
+	}
+	char delimiters[3] = { ' ', '-', '\0' };						// 3 bytes as there are 3 delimiter values
 	char* token1 = NULL;
 	char* token2 = NULL;
-	token1 = strtok(score, delimiters);
+	token1 = strtok(score, delimiters);								// separating the two numbers into separate strings
 	token2 = strtok(NULL, delimiters);
-	*teamScore = atoi(token1);
+	*teamScore = atoi(token1);										// converting those numbers into integers and saving them into the correct pointer variables
 	*oppScore = atoi(token2);
 
 	return 0;														// happy path
@@ -154,15 +188,16 @@ int parseLine(char wholeLine[], char oppName[], int *teamScore, int *oppScore) {
 
 /*
 * Function: parsePrimaryTeam()
-* Description: This function removes the file extension of a string
+* Description: This function removes the file extension of a char array and
+*			   saves the new string into a second char array
 * Parameters: char filename[]  : a string to remove the file extension
 * Returns: void
 */
 void parsePrimaryTeam(char filename[], char primaryTeam[]) {
-	char delimiter[2] = { '.', '\0' };
+	char delimiter[2] = { '.', '\0' };								// 2 bytes as there are two delimiter values
 	char* token = NULL;
-	strcpy(primaryTeam, filename);
-	token = strtok(primaryTeam, delimiter);
+	strcpy(primaryTeam, filename);									// copying filename into primaryTeam to avoid editing filename
+	token = strtok(primaryTeam, delimiter);							// splitting the filename from the file extension
 }
 
 
